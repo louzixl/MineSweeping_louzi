@@ -3,13 +3,8 @@
 
 #include "stdafx.h"
 #include "MineSweeping.h"
-#include <cstdio>
-#include <vector>
-#include <ctime>
-#include <random>
-#include <algorithm>
-
-using std::vector;
+#include "Game.h"
+#include <sstream>
 
 #define MAX_LOADSTRING 100
 
@@ -18,49 +13,32 @@ HINSTANCE hInst;								// 当前实例
 TCHAR szTitle[MAX_LOADSTRING];					// 标题栏文本
 TCHAR szWindowClass[MAX_LOADSTRING];			// 主窗口类名
 
-//自定义结构体
-enum LEVEL{JUNIOR, MIDDLE, ADVANCED};
-
-struct GameStruct{
-	int side_x;
-	int side_y;
-	int num_of_mine;
-	int **game_area;
-};
-
-//自定义全局变量
-GameStruct g_setting;
+//自定义常量
 const int g_board_x = 10;
 const int g_board_y = 60;
 const int g_side_grid = 20;
-HWND g_hStatic_num_flag, g_hStatic_timer, g_hStatic_step;
-HWND g_hEdit_num_flag, g_hEdit_timer, g_hEdit_step;
-int g_nNum_flag;
-int g_nTimer;
-int g_nStep;
-wchar_t g_cNum_flag[10];
-wchar_t g_cTimer[10];
-wchar_t g_cStep[10];
 const int TIMER = 1;
-vector<int> g_vMine;
-POINT g_mouse_pos;
-wchar_t **g_cGame_area;
-int g_nRest;
+
+//自定义全局变量
+int g_nTimer;
+wchar_t g_cTimer[10];
+wchar_t g_cRest[10];
+int g_nCursor_x, g_nCursor_y;
+int g_nClient_x, g_nClient_y;
+Game *g_game;
+HWND g_hwnd, g_hStatic_timer, g_hStatic_rest, g_hEdit_timer, g_hEdit_rest;
 
 //函数声明
-void AlignWindow(HWND hwnd);
+void AlignWindow(HWND hwnd, int x = 9, int y = 9);
 void DrawBK(HDC hdc);
-void InitGame(HWND hwnd, LEVEL l);
-void AllocMem();
-void InitMinePos();
-int Random(int max);
-void InitMap();
-void AddNum(int i, int j);
+void InitGame(HWND hwnd, LEVEL l = PRIMARY);
 void OverGame(HWND hwnd);
-void MouseLeft(HWND hwnd, HDC hdc, const POINT &p);
-void DrawNum(HDC hdc, int x, int y);
-void DrawMine(HDC hdc, int x, int y);
-void DrawFlag(HDC hdc, int x, int y);
+void MouseLeft(HWND hwnd);
+void MouseRight(HWND hwnd);
+void DrawNum(HDC hdc, const int x, const int y);
+void DrawMine(HDC hdc, const int x, const int y);
+void DrawFlag(HDC hdc, const int x, const int y);
+void DrawClient(HDC hdc);
 
 // 此代码模块中包含的函数的前向声明: 
 ATOM				MyRegisterClass(HINSTANCE hInstance);
@@ -69,14 +47,14 @@ LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
 
 int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
-                     _In_opt_ HINSTANCE hPrevInstance,
-                     _In_ LPTSTR    lpCmdLine,
-                     _In_ int       nCmdShow)
+	_In_opt_ HINSTANCE hPrevInstance,
+	_In_ LPTSTR    lpCmdLine,
+	_In_ int       nCmdShow)
 {
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
 
- 	// TODO:  在此放置代码。
+	// TODO:  在此放置代码。
 	MSG msg;
 	HACCEL hAccelTable;
 
@@ -86,7 +64,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	MyRegisterClass(hInstance);
 
 	// 执行应用程序初始化: 
-	if (!InitInstance (hInstance, nCmdShow))
+	if (!InitInstance(hInstance, nCmdShow))
 	{
 		return FALSE;
 	}
@@ -103,7 +81,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 		}
 	}
 
-	return (int) msg.wParam;
+	return (int)msg.wParam;
 }
 
 
@@ -119,17 +97,17 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 
 	wcex.cbSize = sizeof(WNDCLASSEX);
 
-	wcex.style			= CS_HREDRAW | CS_VREDRAW;
-	wcex.lpfnWndProc	= WndProc;
-	wcex.cbClsExtra		= 0;
-	wcex.cbWndExtra		= 0;
-	wcex.hInstance		= hInstance;
-	wcex.hIcon			= LoadIcon(hInstance, MAKEINTRESOURCE(IDI_MINESWEEPING));
-	wcex.hCursor		= LoadCursor(NULL, IDC_ARROW);
-	wcex.hbrBackground	= (HBRUSH)(COLOR_WINDOW+1);
-	wcex.lpszMenuName	= MAKEINTRESOURCE(IDC_MINESWEEPING);
-	wcex.lpszClassName	= szWindowClass;
-	wcex.hIconSm		= LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
+	wcex.style = CS_HREDRAW | CS_VREDRAW;
+	wcex.lpfnWndProc = WndProc;
+	wcex.cbClsExtra = 0;
+	wcex.cbWndExtra = 0;
+	wcex.hInstance = hInstance;
+	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_MINESWEEPING));
+	wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
+	wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+	wcex.lpszMenuName = MAKEINTRESOURCE(IDC_MINESWEEPING);
+	wcex.lpszClassName = szWindowClass;
+	wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
 
 	return RegisterClassEx(&wcex);
 }
@@ -146,22 +124,22 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 //
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
-   HWND hWnd;
+	//HWND hWnd;
 
-   hInst = hInstance; // 将实例句柄存储在全局变量中
+	hInst = hInstance; // 将实例句柄存储在全局变量中
 
-   hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
-      CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
+	g_hwnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
+		CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
 
-   if (!hWnd)
-   {
-      return FALSE;
-   }
+	if (!g_hwnd)
+	{
+		return FALSE;
+	}
 
-   ShowWindow(hWnd, nCmdShow);
-   UpdateWindow(hWnd);
+	ShowWindow(g_hwnd, nCmdShow);
+	UpdateWindow(g_hwnd);
 
-   return TRUE;
+	return TRUE;
 }
 
 //
@@ -178,28 +156,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	int wmId, wmEvent;
 	PAINTSTRUCT ps;
-	HDC hdc;
+	HDC hdc, memDc;
+	HBITMAP bmp;
 
 	switch (message)
 	{
 	case WM_CREATE:
-		g_hStatic_num_flag = CreateWindow(L"STATIC", L"Flag", WS_CHILD | WS_VISIBLE | SS_CENTER,
-			g_board_x, g_board_y - 50, 50, 15, hWnd, NULL, GetModuleHandle(NULL), NULL);
-		g_hStatic_timer = CreateWindow(L"STATIC", L"Timer", WS_CHILD | WS_VISIBLE | SS_CENTER,
-			g_board_x + 60, g_board_y - 50, 50, 15, hWnd, NULL, GetModuleHandle(NULL), NULL);
-		g_hStatic_step = CreateWindow(L"STATIC", L"Step", WS_CHILD | WS_VISIBLE | SS_CENTER,
-			g_board_x + 120, g_board_y - 50, 50, 15, hWnd, NULL, GetModuleHandle(NULL), NULL);
-		g_hEdit_num_flag = CreateWindow(L"EDIT", L"mine", WS_CHILD | WS_VISIBLE | ES_RIGHT | WS_BORDER | ES_READONLY,
-			g_board_x, g_board_y - 30, 50, 20, hWnd, NULL, GetModuleHandle(NULL), NULL);
-		g_hEdit_timer = CreateWindow(L"EDIT", L"timer", WS_CHILD | WS_VISIBLE | ES_RIGHT | WS_BORDER | ES_READONLY,
-			g_board_x + 60, g_board_y - 30, 50, 20, hWnd, NULL, GetModuleHandle(NULL), NULL);
-		g_hEdit_step = CreateWindow(L"EDIT", L"step", WS_CHILD | WS_VISIBLE | ES_RIGHT | WS_BORDER | ES_READONLY,
-			g_board_x + 120, g_board_y - 30, 50, 20, hWnd, NULL, GetModuleHandle(NULL), NULL);
-		InitGame(hWnd, MIDDLE);
 		AlignWindow(hWnd);
+		g_hStatic_timer = CreateWindow(L"STATIC", L"Timer", WS_CHILD | WS_VISIBLE | SS_CENTER,
+			g_board_x, g_board_y - 50, 50, 15, hWnd, NULL, GetModuleHandle(NULL), NULL);
+		g_hStatic_rest = CreateWindow(L"STATIC", L"Step", WS_CHILD | WS_VISIBLE | SS_CENTER,
+			g_board_x + 60, g_board_y - 50, 50, 15, hWnd, NULL, GetModuleHandle(NULL), NULL);
+		g_hEdit_timer = CreateWindow(L"EDIT", L"timer", WS_CHILD | WS_VISIBLE | ES_RIGHT | WS_BORDER | ES_READONLY,
+			g_board_x, g_board_y - 30, 50, 20, hWnd, NULL, GetModuleHandle(NULL), NULL);
+		g_hEdit_rest = CreateWindow(L"EDIT", L"step", WS_CHILD | WS_VISIBLE | ES_RIGHT | WS_BORDER | ES_READONLY,
+			g_board_x + 60, g_board_y - 30, 50, 20, hWnd, NULL, GetModuleHandle(NULL), NULL);
+		InitGame(hWnd);
 		break;
 	case WM_COMMAND:
-		wmId    = LOWORD(wParam);
+		wmId = LOWORD(wParam);
 		wmEvent = HIWORD(wParam);
 		// 分析菜单选择: 
 		switch (wmId)
@@ -215,8 +190,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 		break;
 	case WM_LBUTTONDOWN:
-		GetCursorPos(&g_mouse_pos);
-
+		g_nCursor_x = (LOWORD(lParam) - g_board_x) / g_side_grid;
+		g_nCursor_y = (HIWORD(lParam) - g_board_y) / g_side_grid;
+		MouseLeft(hWnd);
+		break;
+	case WM_RBUTTONDOWN:
+		g_nCursor_x = (LOWORD(lParam) - g_board_x) / g_side_grid;
+		g_nCursor_y = (HIWORD(lParam) - g_board_y) / g_side_grid;
+		MouseRight(hWnd);
 		break;
 	case WM_TIMER:
 		wsprintf(g_cTimer, L"%ds", ++g_nTimer);
@@ -225,11 +206,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_PAINT:
 		hdc = BeginPaint(hWnd, &ps);
 		// TODO:  在此添加任意绘图代码...
-		DrawBK(hdc);
+		memDc = CreateCompatibleDC(hdc);
+		bmp = CreateCompatibleBitmap(hdc, g_nClient_x, g_nClient_y);
+		SelectObject(memDc, bmp);
+		DrawBK(memDc);
+		DrawClient(memDc);
+		BitBlt(hdc, 0, 0, g_nClient_x, g_nClient_y, memDc, 0, 0, SRCCOPY);
+		DeleteObject(bmp);
+		DeleteObject(memDc);
 		EndPaint(hWnd, &ps);
 		break;
 	case WM_DESTROY:
-		OverGame(hWnd);
 		PostQuitMessage(0);
 		break;
 	default:
@@ -258,12 +245,12 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 	return (INT_PTR)FALSE;
 }
 
-void AlignWindow(HWND hwnd)
+void AlignWindow(HWND hwnd, int x, int y)
 {
 	int screen_x, screen_y;
 	int client_x, client_y;
 	int proc_x, proc_y;
-	int x, y;
+	int x1, y1;
 	RECT rect;
 
 	screen_x = GetSystemMetrics(SM_CXSCREEN);
@@ -275,260 +262,191 @@ void AlignWindow(HWND hwnd)
 	client_x = rect.right - rect.left;
 	client_y = rect.bottom - rect.top;
 
-	proc_x = proc_x - client_x + g_board_x * 2 + g_side_grid*g_setting.side_x;
-	proc_y = proc_y - client_y + g_board_y + g_board_x + g_side_grid*g_setting.side_y;
-	x = (screen_x - proc_x) / 2;
-	y = (screen_y - proc_y) / 2;
+	g_nClient_x = g_board_x * 2 + g_side_grid * x;
+	g_nClient_y = g_board_y + g_board_x + g_side_grid * y;
+	proc_x = proc_x - client_x + g_nClient_x;
+	proc_y = proc_y - client_y + g_nClient_y;
+	x1 = (screen_x - proc_x) / 2;
+	y1 = (screen_y - proc_y) / 2;
 
-	MoveWindow(hwnd, x, y, proc_x, proc_y, TRUE);
+	MoveWindow(hwnd, x1, y1, proc_x, proc_y, TRUE);
 }
 
 void DrawBK(HDC hdc)
 {
 	HPEN pen_background = CreatePen(BS_SOLID, 2, RGB(128, 128, 128));
 	HPEN pen_grid = CreatePen(BS_SOLID, 1, RGB(0, 0, 255));
-	int i, j;
+	int i;
 
 	SelectObject(hdc, pen_background);
-	Rectangle(hdc, g_board_x, g_board_y, g_board_x + g_side_grid*g_setting.side_x, g_board_y + g_side_grid*g_setting.side_y);
+	Rectangle(hdc, g_board_x, g_board_y, g_board_x + g_side_grid*g_game->Get_side_x(), 
+		g_board_y + g_side_grid*g_game->Get_side_y());
 	DeleteObject(pen_background);
 
 	SelectObject(hdc, pen_grid);
-	for (i = 1; i < g_setting.side_x; i++)
+	for (i = 1; i < g_game->Get_side_x(); i++)
 	{
 		MoveToEx(hdc, g_board_x + g_side_grid*i, g_board_y, NULL);
-		LineTo(hdc, g_board_x + g_side_grid*i, g_board_y + g_side_grid*g_setting.side_y);
+		LineTo(hdc, g_board_x + g_side_grid*i, g_board_y + g_side_grid*g_game->Get_side_y());
 	}
-	for (i = 1; i < g_setting.side_y; i++)
+	for (i = 1; i < g_game->Get_side_y(); i++)
 	{
 		MoveToEx(hdc, g_board_x, g_board_y + g_side_grid*i, NULL);
-		LineTo(hdc, g_board_x + g_side_grid*g_setting.side_x, g_board_y + g_side_grid*i);
+		LineTo(hdc, g_board_x + g_side_grid*g_game->Get_side_x(), g_board_y + g_side_grid*i);
 	}
-	/*for (i = 0; i < g_setting.side_y; i++)
-	{
-		for (j = 0; j < g_setting.side_x; j++)
-		{
-			Rectangle(hdc, g_board_x + g_side_grid*j, g_board_y + g_side_grid*i,
-				g_board_x + g_side_grid*(j + 1), g_board_y + g_side_grid*(i + 1));
-		}
-	}*/
 	DeleteObject(pen_grid);
 }
 
 void InitGame(HWND hwnd, LEVEL l)
 {
-	int i, j;
 	switch (l)
 	{
-	case JUNIOR:
-		g_setting.num_of_mine = 10;
-		g_setting.side_x = g_setting.side_y = 9;
-		AllocMem();
+	case PRIMARY:
+		g_game = new Game; 
 		break;
 	case MIDDLE:
-		g_setting.num_of_mine = 40;
-		g_setting.side_x = g_setting.side_y = 16;
-		AllocMem();
+		g_game = new Game(MIDDLE, 40, 16, 16, 256);
 		break;
 	case ADVANCED:
-		g_setting.num_of_mine = 99;
-		g_setting.side_x = 16;
-		g_setting.side_y = 30;
-		AllocMem();
+		g_game = new Game(ADVANCED, 99, 16, 30, 480);
 		break;
-	default: 
+	default:
 		break;
 	}
-	g_nRest = g_setting.side_x*g_setting.side_y;
-	g_nNum_flag = 0;
+
 	g_nTimer = 0;
-	g_nStep = 0;
-	wsprintf(g_cNum_flag, L"%d", g_nNum_flag);
 	wsprintf(g_cTimer, L"%ds", g_nTimer);
-	wsprintf(g_cStep, L"%d", g_nStep);
-	SetWindowText(g_hEdit_num_flag, g_cNum_flag);
+	wsprintf(g_cRest, L"%d", g_game->Get_rest());
 	SetWindowText(g_hEdit_timer, g_cTimer);
-	SetWindowText(g_hEdit_step, g_cStep);
+	SetWindowText(g_hEdit_rest, g_cRest);
 
-	InitMinePos();
-	InitMap();
+	//g_hBm_mine = (HBITMAP)LoadImage(NULL, L"mine.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+	//g_hBm_flag = (HBITMAP)LoadImage(NULL, L"flag.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+	//GetObject(g_hBm_mine, sizeof(BITMAP), &g_Bm_mine);
+	//GetObject(g_hBm_flag, sizeof(BITMAP), &g_Bm_flag);
 	SetTimer(hwnd, TIMER, 1000, NULL);
-}
-
-void AllocMem()
-{
-	int i;
-
-	g_setting.game_area = new int*[g_setting.side_y];
-	g_cGame_area = new wchar_t*[g_setting.side_y];
-	for (i = 0; i < g_setting.side_y; i++)
-	{
-		g_setting.game_area[i] = new int[g_setting.side_x];
-		g_cGame_area[i] = new wchar_t[g_setting.side_x];
-		memset(g_setting.game_area[i], 0, sizeof(g_setting.game_area[i]));
-		memset(g_cGame_area[i], 0, sizeof(g_cGame_area[i]));
-	}
-}
-
-void InitMinePos()
-{
-	int i;
-	int tmp_pos, col, row;
-	bool bFlag = false;
-	int total_grid = g_setting.side_x*g_setting.side_y;
-
-	for (i = 0; i < g_setting.num_of_mine; i++)
-	{
-		g_vMine.push_back(Random(total_grid - 1));
-	}
-	while (1)
-	{
-		bFlag = false;
-		sort(g_vMine.begin(), g_vMine.end());
-		vector<int>::iterator pos = g_vMine.begin();
-		vector<int>::const_iterator end = g_vMine.cend();
-		for (pos; pos != end - 1; ++pos)
-		{
-			if (*pos == *(pos + 1))
-			{
-				*pos = Random(total_grid - 1);
-				bFlag = true;
-				break;
-			}
-		}
-		if (pos == end - 1 && !bFlag)
-			break;
-	}
-	for (i = 0; i < g_setting.num_of_mine; i++)
-	{
-		tmp_pos = g_vMine[i];
-		row = tmp_pos / g_setting.side_y;
-		col = tmp_pos % g_setting.side_y;
-		g_setting.game_area[row][col] = -1;
-	}
-}
-
-int Random(int max)
-{
-	std::default_random_engine engine(time(0));
-	return std::uniform_int_distribution<int>(0, max)(engine);
-}
-
-void InitMap()
-{
-	int i, j;
-	int row, col;
-	vector<int>::const_iterator pos = g_vMine.cbegin();
-	vector<int>::const_iterator end = g_vMine.cend();
-
-	for (pos; pos != end; ++pos)
-	{
-		row = (*pos) / g_setting.side_y;
-		col = (*pos) % g_setting.side_y;
-		AddNum(row, col);
-	}
-}
-
-void AddNum(int i, int j)
-{
-	if (i > 0 && g_setting.game_area[i - 1][j] != -1)
-	{
-		g_setting.game_area[i-1][j]++;
-		if (j > 0 && g_setting.game_area[i - 1][j - 1] != -1)
-			g_setting.game_area[i - 1][j - 1]++;
-		if (j < g_setting.side_x - 1 && g_setting.game_area[i - 1][j + 1] != -1)
-			g_setting.game_area[i - 1][j + 1]++;
-	}
-	if (i < g_setting.side_y - 1 && g_setting.game_area[i + 1][j] != -1)
-	{
-		g_setting.game_area[i + 1][j]++;
-		if (j > 0 && g_setting.game_area[i + 1][j - 1] != -1)
-			g_setting.game_area[i + 1][j - 1]++;
-		if (j < g_setting.side_x - 1 && g_setting.game_area[i + 1][j + 1] != -1)
-			g_setting.game_area[i + 1][j + 1]++;
-	}
-	if (j > 0 && g_setting.game_area[i][j - 1] != -1)
-		g_setting.game_area[i][j - 1]++;
-	if (j < g_setting.side_x - 1 && g_setting.game_area[i][j + 1] != -1)
-		g_setting.game_area[i][j + 1]++;
+	AlignWindow(hwnd, g_game->Get_side_x(), g_game->Get_side_y());
 }
 
 void OverGame(HWND hwnd)
 {
 	KillTimer(hwnd, TIMER);
-	int i, j;
-
-	for (i = 0; i < g_setting.side_y; i++)
-	{
-		delete[]g_setting.game_area[i];
-	}
-	delete[] g_setting.game_area;
-	for (i = 0; i < g_setting.side_y; i++)
-	{
-		delete[]g_cGame_area[i];
-	}
-	delete[] g_cGame_area;
+	g_game->Show_all();
+	InvalidateRect(hwnd, NULL, TRUE);
+	Sleep(100);
+	delete g_game;
+	//g_game = nullptr;
 }
 
-void MouseLeft(HWND hwnd, HDC hdc, const POINT &p)
+void MouseLeft(HWND hwnd)
 {
-	if (p.x<g_board_x || p.x>=g_board_x + g_side_grid*g_setting.side_x ||
-		p.y<g_board_y || p.y>=g_board_y + g_side_grid*g_setting.side_y)
-		return;
-	int x = p.x;
-	int y = p.y;
-	int col = (x - g_board_x) / g_side_grid;
-	int row = (y - g_board_y) / g_side_grid;
-	if (g_setting.game_area[row][col] >= 0)
+	if (false == g_game->Left_button(g_nCursor_x, g_nCursor_y))
 	{
-		DrawNum(hdc, col, row);
-		g_nRest--;
-		g_nStep++;
-		wsprintf(g_cStep, L"%d", g_nStep);
-		SetWindowText(g_hEdit_step, g_cStep);
-		if (g_nRest <= 10)
+		OverGame(hwnd);
+		if (IDYES == MessageBox(hwnd, L"Ooh, you lost...Try again?", L"Result", MB_YESNO))
 		{
-			if (IDYES == MessageBox(hwnd, L"Congratulations! You win!", L"Result", MB_YESNO))
+			InitGame(hwnd);
+		}
+		else
+			PostQuitMessage(0);
+	}
+	else
+	{
+		wsprintf(g_cRest, L"%d", g_game->Get_rest());
+		SetWindowText(g_hEdit_rest, g_cRest);
+		InvalidateRect(hwnd, NULL, TRUE);
+		if (g_game->Get_rest() == 10)
+		{
+			OverGame(hwnd);
+			if (IDYES == MessageBox(hwnd, L"Congratulations! You win!!! Play again?", L"Result", MB_YESNO))
 			{
-				InitGame(hwnd, JUNIOR);
-				AlignWindow(hwnd);
+				InitGame(hwnd);
 			}
 			else
 				PostQuitMessage(0);
 		}
 	}
-	else if (g_setting.game_area[row][col] == -1)
+}
+
+void MouseRight(HWND hwnd)
+{
+	g_game->Right_button(g_nCursor_x, g_nCursor_y);
+	InvalidateRect(hwnd, NULL, TRUE);
+}
+
+void DrawNum(HDC hdc, const int x, const int y)
+{
+	RECT rect;
+	rect.left = g_board_x + g_side_grid*x;
+	rect.right = g_board_x + g_side_grid*(x + 1);
+	rect.top = g_board_y + g_side_grid*y;
+	rect.bottom = g_board_y + g_side_grid*(y + 1);
+
+	int **game_num = g_game->Get_client_num();
+	wstring **game_char = g_game->Get_client_char();
+	std::wstringstream ss;
+	ss << game_num[y][x];
+	game_char[y][x] = ss.str();
+	SetBkMode(hdc, TRANSPARENT);
+	DrawText(hdc, game_char[y][x].c_str(), 1, &rect, DT_CENTER | DT_VCENTER);
+	game_num = nullptr;
+	game_char = nullptr;
+}
+
+void DrawMine(HDC hdc, const int x, const int y)
+{
+	HDC tmpdc = CreateCompatibleDC(hdc);
+	BITMAP bm;
+	HBITMAP bmp = (HBITMAP)LoadImage(NULL, L"mine.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+	GetObject(bmp, sizeof(BITMAP), &bm);
+	int x1 = g_board_x + g_side_grid*x;
+	int y1 = g_board_y + g_side_grid*y;
+	SelectObject(tmpdc, bmp);
+	BitBlt(hdc, x1, y1, g_side_grid, g_side_grid, tmpdc, 0, 0, SRCCOPY);
+	DeleteObject(tmpdc);
+	DeleteObject(bmp);
+}
+
+void DrawFlag(HDC hdc, const int x, const int y)
+{
+	HDC tmpdc = CreateCompatibleDC(hdc);
+	BITMAP bm;
+	HBITMAP bmp = (HBITMAP)LoadImage(NULL, L"flag.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+	GetObject(bmp, sizeof(BITMAP), &bm);
+	int x1 = g_board_x + g_side_grid*x;
+	int y1 = g_board_y + g_side_grid*y;
+	SelectObject(tmpdc, bmp);
+	BitBlt(hdc, x1, y1, g_side_grid, g_side_grid, tmpdc, 0, 0, SRCCOPY);
+	DeleteObject(tmpdc);
+	DeleteObject(bmp);
+}
+
+void DrawClient(HDC hdc)
+{
+	int i, j;
+	int **game_flag = g_game->Get_client_flag();
+
+	for (i = 0; i < g_game->Get_side_y(); i++)
 	{
-		DrawMine(hdc, col, row);
-		OverGame(hwnd);
-		if (IDYES == MessageBox(hwnd, L"Ooh, you lost...", L"Result", MB_YESNO))
+		for (j = 0; j < g_game->Get_side_x(); j++)
 		{
-			InitGame(hwnd, JUNIOR);
-			AlignWindow(hwnd);
+			if (game_flag[i][j] == 0)
+			{
+				continue;
+			}
+			else if (game_flag[i][j] == 1)
+			{
+				DrawNum(hdc, j, i);
+			}
+			else if (game_flag[i][j] == 2)
+			{
+				DrawFlag(hdc, j, i);
+			}
+			else if (game_flag[i][j] == 3)
+			{
+				DrawMine(hdc, j, i);
+			}
 		}
-		else
-			PostQuitMessage(0);
 	}
-	else if (g_setting.game_area[row][col] == -2)
-	{
-		DrawFlag(hdc, col, row);
-		g_nNum_flag++;
-		wsprintf(g_cNum_flag, L"%d", g_nNum_flag);
-		SetWindowText(g_hEdit_num_flag, g_cNum_flag);
-	}
-}
-
-void DrawNum(HDC hdc, int x, int y)
-{
-
-}
-
-void DrawMine(HDC hdc, int x, int y)
-{
-
-}
-
-void DrawFlag(HDC hdc, int x, int y)
-{
-
+	game_flag = nullptr;
 }

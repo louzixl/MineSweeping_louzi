@@ -119,26 +119,16 @@ void Game::Init_num()
 
 void Game::Set_mine_round_num(const int i, const int j)
 {
-	if (i > 0 && m_ppn_grid_num[i - 1][j] != -1)
-	{
-		m_ppn_grid_num[i - 1][j]++;
-		if (j > 0 && m_ppn_grid_num[i - 1][j - 1] != -1)
-			m_ppn_grid_num[i - 1][j - 1]++;
-		if (j < m_n_side_x - 1 && m_ppn_grid_num[i - 1][j + 1] != -1)
-			m_ppn_grid_num[i - 1][j + 1]++;
-	}
-	if (i < m_n_side_y - 1 && m_ppn_grid_num[i + 1][j] != -1)
-	{
-		m_ppn_grid_num[i + 1][j]++;
-		if (j > 0 && m_ppn_grid_num[i + 1][j - 1] != -1)
-			m_ppn_grid_num[i + 1][j - 1]++;
-		if (j < m_n_side_x - 1 && m_ppn_grid_num[i + 1][j + 1] != -1)
-			m_ppn_grid_num[i + 1][j + 1]++;
-	}
-	if (j > 0 && m_ppn_grid_num[i][j - 1] != -1)
-		m_ppn_grid_num[i][j - 1]++;
-	if (j < m_n_side_x - 1 && m_ppn_grid_num[i][j + 1] != -1)
-		m_ppn_grid_num[i][j + 1]++;
+	if (i > 0 && j > 0 && m_ppn_grid_num[i-1][j-1] != -1) m_ppn_grid_num[i - 1][j - 1]++;
+	if (i > 0 && j< m_n_side_x - 1 && m_ppn_grid_num[i - 1][j + 1] != -1) m_ppn_grid_num[i - 1][j + 1]++;
+	if (i > 0 && m_ppn_grid_num[i - 1][j] != -1) m_ppn_grid_num[i - 1][j]++;
+
+	if (j > 0 && m_ppn_grid_num[i][j - 1] != -1) m_ppn_grid_num[i][j - 1]++;
+	if (j < m_n_side_x - 1 && m_ppn_grid_num[i][j + 1] != -1) m_ppn_grid_num[i][j + 1]++;
+
+	if (i < m_n_side_y - 1 && j > 0 && m_ppn_grid_num[i + 1][j - 1] != -1) m_ppn_grid_num[i + 1][j - 1]++;
+	if (i < m_n_side_y - 1 && m_ppn_grid_num[i + 1][j] != -1) m_ppn_grid_num[i + 1][j]++;
+	if (i < m_n_side_y - 1 && j < m_n_side_x - 1 && m_ppn_grid_num[i + 1][j + 1] != -1)m_ppn_grid_num[i + 1][j + 1]++;
 }
 
 void Game::Show_all()

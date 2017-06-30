@@ -25,13 +25,14 @@ wchar_t g_cTimer[10];
 wchar_t g_cRest[10];
 int g_nCursor_x, g_nCursor_y;
 int g_nClient_x, g_nClient_y;
+LEVEL g_level = PRIMARY;
 Game *g_game;
-HWND g_hwnd, g_hStatic_timer, g_hStatic_rest, g_hEdit_timer, g_hEdit_rest;
+HWND g_hStatic_timer, g_hStatic_rest, g_hEdit_timer, g_hEdit_rest;
 
 //函数声明
 void AlignWindow(HWND hwnd, int x = 9, int y = 9);
 void DrawBK(HDC hdc);
-void InitGame(HWND hwnd, LEVEL l = PRIMARY);
+void InitGame(HWND hwnd, LEVEL l);
 void OverGame(HWND hwnd);
 void MouseLeft(HWND hwnd);
 void MouseRight(HWND hwnd);
@@ -124,20 +125,20 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 //
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
-	//HWND hWnd;
+	HWND hWnd;
 
 	hInst = hInstance; // 将实例句柄存储在全局变量中
 
-	g_hwnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
+	hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
 
-	if (!g_hwnd)
+	if (!hWnd)
 	{
 		return FALSE;
 	}
 
-	ShowWindow(g_hwnd, nCmdShow);
-	UpdateWindow(g_hwnd);
+	ShowWindow(hWnd, nCmdShow);
+	UpdateWindow(hWnd);
 
 	return TRUE;
 }
@@ -171,7 +172,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			g_board_x, g_board_y - 30, 50, 20, hWnd, NULL, GetModuleHandle(NULL), NULL);
 		g_hEdit_rest = CreateWindow(L"EDIT", L"step", WS_CHILD | WS_VISIBLE | ES_RIGHT | WS_BORDER | ES_READONLY,
 			g_board_x + 60, g_board_y - 30, 50, 20, hWnd, NULL, GetModuleHandle(NULL), NULL);
-		InitGame(hWnd);
+		InitGame(hWnd, g_level);
 		break;
 	case WM_COMMAND:
 		wmId = LOWORD(wParam);
@@ -179,6 +180,33 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		// 分析菜单选择: 
 		switch (wmId)
 		{
+		case ID_PRIMARY:
+			if (g_level != PRIMARY)
+			{
+				OverGame(hWnd);
+				g_level = PRIMARY;
+				InitGame(hWnd, g_level);
+				InvalidateRect(hWnd, NULL, TRUE);
+			}
+			break;
+		case ID_MIDDLE:
+			if (g_level != MIDDLE)
+			{
+				OverGame(hWnd);
+				g_level = MIDDLE;
+				InitGame(hWnd, g_level);
+				InvalidateRect(hWnd, NULL, TRUE);
+			}
+			break;
+		case ID_ADVANCED:
+			if (g_level != ADVANCED)
+			{
+				OverGame(hWnd);
+				g_level = ADVANCED;
+				InitGame(hWnd, g_level);
+				InvalidateRect(hWnd, NULL, TRUE);
+			}
+			break;
 		case IDM_ABOUT:
 			DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
 			break;
@@ -319,11 +347,6 @@ void InitGame(HWND hwnd, LEVEL l)
 	wsprintf(g_cRest, L"%d", g_game->Get_rest());
 	SetWindowText(g_hEdit_timer, g_cTimer);
 	SetWindowText(g_hEdit_rest, g_cRest);
-
-	//g_hBm_mine = (HBITMAP)LoadImage(NULL, L"mine.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-	//g_hBm_flag = (HBITMAP)LoadImage(NULL, L"flag.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-	//GetObject(g_hBm_mine, sizeof(BITMAP), &g_Bm_mine);
-	//GetObject(g_hBm_flag, sizeof(BITMAP), &g_Bm_flag);
 	SetTimer(hwnd, TIMER, 1000, NULL);
 	AlignWindow(hwnd, g_game->Get_side_x(), g_game->Get_side_y());
 }
@@ -333,9 +356,9 @@ void OverGame(HWND hwnd)
 	KillTimer(hwnd, TIMER);
 	g_game->Show_all();
 	InvalidateRect(hwnd, NULL, TRUE);
-	Sleep(100);
+	SendMessage(hwnd, WM_PAINT, 1, NULL);
+	Sleep(50);
 	delete g_game;
-	//g_game = nullptr;
 }
 
 void MouseLeft(HWND hwnd)
@@ -345,7 +368,8 @@ void MouseLeft(HWND hwnd)
 		OverGame(hwnd);
 		if (IDYES == MessageBox(hwnd, L"Ooh, you lost...Try again?", L"Result", MB_YESNO))
 		{
-			InitGame(hwnd);
+			InitGame(hwnd, g_level);
+			InvalidateRect(hwnd, NULL, TRUE);
 		}
 		else
 			PostQuitMessage(0);
@@ -360,7 +384,8 @@ void MouseLeft(HWND hwnd)
 			OverGame(hwnd);
 			if (IDYES == MessageBox(hwnd, L"Congratulations! You win!!! Play again?", L"Result", MB_YESNO))
 			{
-				InitGame(hwnd);
+				InitGame(hwnd, g_level);
+				InvalidateRect(hwnd, NULL, TRUE);
 			}
 			else
 				PostQuitMessage(0);
